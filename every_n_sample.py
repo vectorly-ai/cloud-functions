@@ -9,6 +9,7 @@ import json
 import logging
 import sys
 import os
+import time
 from Coinfer import requests, CheckResponseSubject
 
 logging.basicConfig(
@@ -25,6 +26,7 @@ params = json.loads(sys.argv[1])
 experiment_id = params['experiment_id']
 batch_id = params['batch_id']
 run_id = params['run_id']
+chain_name = params['chain_name']
 n_iteration = params['n_iteration']
 
 reader = RedisSampleReader()
@@ -32,13 +34,24 @@ result = {}
 for varname, data in reader.get_data(experiment_id).items():
   result[varname] = ("avg", sum(data[:n_iteration]) / n_iteration)
 
-logger.info("%s", result)
+tm = time.time()
+logger.info("%s %s", tm, result)
 token = os.environ['COINFER_AUTH_TOKEN']
 url_root = os.environ['COINFER_SERVER_ENDPOINT']
+
 rsp = requests.post(
-    url_root + f'/mcmc/experiment/{experiment_id}/runinfo/{batch_id}/{run_id}/nsample', 
-    json={"n_sample": n_iteration, "stat": result}, 
-    check_subjects=CheckResponseSubject.TIMEOUT | CheckResponseSubject.STATUS_CODE | CheckResponseSubject.JSON | CheckResponseSubject.STATUS,
+    url_root + f'/api/object/{experiment_id}?tm={tm}',
+    json={
+        "payload": {
+            "object_type": "experiment.nsample_stat",
+            "batch_id": batch_id,
+            "run_id": run_id,
+            "chain_name": chain_name,
+            "n_sample": n_iteration,
+            "stat": result
+        }
+    }, 
+    check_subjects=CheckResponseSubject.ALL,
     headers={"Authorization": f"Bearer {token}"},
 )
 if requests.errmsg:
